@@ -1,13 +1,17 @@
-mod db;
-use etcd_client::{Error};
+// Clippy Rules
+#![deny(clippy::unwrap_used)]
+#![allow(clippy::single_char_pattern)]
 
-const KEYS: [&str; 4] = ["foo", "bar", "region", "access_db_hostname"];
+use etcd_client::Error;
+use veritas::db;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let client = db::ConnectionManager::new(vec!["10.0.0.92:2379".to_string()], "root".to_string(), "CZlOeRySgF".to_string()).await?;
 
-    let keys = db::get_all_config_keys(&mut client.get_client()).await?;
+    client.get_client().delete("foo", None).await?;
+
+    let keys = db::get_config_key_all(&mut client.get_client()).await?;
 
     for key in keys {
         println!("{}", key);

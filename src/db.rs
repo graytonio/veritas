@@ -1,30 +1,43 @@
-use etcd_client::{Client, ConnectOptions, Error, GetOptions};
+use etcd_client::{Client, ConnectOptions, Error};
 
-const CONFIG_KEY_PREFIX: &str = "config_key";
+const CONFIG_KEY_ARRAY_KEY: &str = "valid_config_keys";
 
-pub async fn get_config_key(client: &mut Client, index: i32) -> Result<Option<String>, Error> {
-    let resp = client.get(format!("{}/{}", CONFIG_KEY_PREFIX, index), None).await?;
+// TODO Convert from Vec<String> to HashSet<String> for storing config keys
 
-    if let Some(key) = resp.kvs().first() {
-        return Ok(Some(key.value_str()?.to_string()));
+pub async fn get_config_key_all(client: &mut Client) -> Result<Vec<String>, Error> {
+    let resp = client.get(CONFIG_KEY_ARRAY_KEY, None).await?;
+
+    match resp.kvs().first() {
+        Some(key) => Ok(key.value_str()?.split(";").map(|s| s.to_string()).collect::<Vec<String>>()),
+        None => Ok(Vec::new())
     }
-
-    return Ok(None);
 }
 
-pub async fn get_config_key_count(client: &mut Client) -> Result<i64, Error> {
-    let resp = client.get(CONFIG_KEY_PREFIX, Some(GetOptions::new().with_prefix().with_count_only())).await?;
-    Ok(resp.count())
+pub async fn get_config_key(client: &mut Client, index: usize) -> Result<Option<String>, Error> {
+    let keys = get_config_key_all(client).await?;
+    Ok(keys.get(index).cloned())
 }
 
-pub async fn get_all_config_keys(client: &mut Client) -> Result<Vec<String>, Error> {
-    let resp = client.get(CONFIG_KEY_PREFIX, Some(GetOptions::new().with_prefix())).await?;
-    Ok(resp.kvs().iter().map(|ck| ck.value_str().unwrap().to_string()).collect::<Vec<String>>())
+pub async fn get_config_key_count(client: &mut Client) -> Result<usize, Error> {
+    Ok(get_config_key_all(client).await?.len())
+}
+
+async fn update_config_keys(client: &mut Client, keys: Vec<String>) -> Result<(), Error> {
+    client.put(CONFIG_KEY_ARRAY_KEY, keys.join(";"), None).await?;
+    Ok(())
 }
 
 pub async fn add_config_key(client: &mut Client, key: String) -> Result<(), Error> {
-    let next_index = get_config_key_count(client).await?;
-    client.put(format!("{}/{}", CONFIG_KEY_PREFIX, next_index), key, None).await?;
+    let mut keys = get_config_key_all(client).await?;
+    keys.push(key);
+    update_config_keys(client, keys).await?;
+    Ok(())
+}
+
+pub async fn remove_config_key(client: &mut Client, key: String) -> Result<(), Error> { 
+    let keys = get_config_key_all(client).await?;
+    let new_keys = keys.into_iter().filter(|k| *k != key).collect::<Vec<String>>();
+    update_config_keys(client, new_keys).await?;
     Ok(())
 }
 

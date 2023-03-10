@@ -8,9 +8,10 @@ pub struct AppState {
 
 pub fn config(cfg: &mut web::ServiceConfig) {
    cfg
-       .service(get_all_config_keys)
-       .service(add_config_key)
-       .service(delete_config_key);
+    .service(web::scope("/schema")
+        .service(get_all_config_keys)
+        .service(add_config_key)
+        .service(delete_config_key));
 }
 
 #[get("/")]

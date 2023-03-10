@@ -12,25 +12,8 @@ async fn main() -> std::io::Result<()> {
     let client = db::ConnectionManager::new(vec!["127.0.0.1:2379".to_string()], None).await.unwrap();
 
     HttpServer::new(move || {
-        App::new().app_data(web::Data::new(server::AppState{ etcd_client: client.clone() })).configure(server::config)
+        App::new().app_data(web::Data::new(server::AppState{ etcd_client: client.clone() })).service(web::scope("/api").configure(server::config))
     }).bind(("127.0.0.1", 8080))?
     .run()
     .await
-/*    
-    let client = db::ConnectionManager::new(vec!["localhost:2379".to_string()], None).await?;
-
-    db::remove_config_key(&mut client.get_client(), "artifactory_db_name".to_string()).await?;
-
-    db::add_config_key(&mut client.get_client(), "artifactory_db_name".to_string()).await?;
-    db::add_config_key(&mut client.get_client(), "artifactory_db_name".to_string()).await?;
-    db::add_config_key(&mut client.get_client(), "artifactory_db_name".to_string()).await?;
-
-    let keys = db::get_config_key_all(&mut client.get_client()).await?;
-
-    for key in keys {
-        println!("{}", key);
-    }
-
-    Ok(())
-*/
 }

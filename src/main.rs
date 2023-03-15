@@ -7,9 +7,9 @@ use actix_web::{HttpServer, App, web};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    simple_logger::init_with_env().unwrap();
+    simple_logger::init_with_env().expect("Could not start logger");
 
-    let client = db::ConnectionManager::new(vec!["127.0.0.1:2379".to_string()], None).await.unwrap();
+    let client = db::ConnectionManager::new(vec!["127.0.0.1:2379".to_string()], None).await.expect("Could not connect to etcd cluster");
 
     HttpServer::new(move || {
         App::new().app_data(web::Data::new(server::AppState{ etcd_client: client.clone() })).service(web::scope("/api").configure(server::config))

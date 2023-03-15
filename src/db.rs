@@ -1,14 +1,17 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use log::info;
-use etcd_client::{Client, ConnectOptions, Error};
+use etcd_client::{Client, ConnectOptions, Error, GetOptions};
 
 const CONFIG_KEY_ARRAY_KEY: &str = "valid_config_keys";
 
-pub async fn get_config_key_all(client: &mut Client) -> Result<HashSet<String>, Error> {
+pub type ConfigSchema = HashSet<String>;
+pub type NodeConfig = HashMap<String, String>;
+
+pub async fn get_config_key_all(client: &mut Client) -> Result<ConfigSchema, Error> {
     let resp = client.get(CONFIG_KEY_ARRAY_KEY, None).await?;
 
     match resp.kvs().first() {
-        Some(key) => Ok(key.value_str()?.split(";").map(|s| s.to_string()).collect::<HashSet<String>>()),
+        Some(key) => Ok(key.value_str()?.split(";").map(|s| s.to_string()).collect::<ConfigSchema>()),
         None => Ok(HashSet::new())
     }
 }
@@ -22,7 +25,7 @@ pub async fn get_config_key_count(client: &mut Client) -> Result<usize, Error> {
     Ok(get_config_key_all(client).await?.len())
 }
 
-async fn update_config_keys(client: &mut Client, keys: HashSet<String>) -> Result<(), Error> {
+pub async fn update_config_keys(client: &mut Client, keys: ConfigSchema) -> Result<(), Error> {
     client.put(CONFIG_KEY_ARRAY_KEY, keys.into_iter().collect::<Vec<String>>().join(";"), None).await?;
     Ok(())
 }
@@ -35,11 +38,49 @@ pub async fn add_config_key(client: &mut Client, key: String) -> Result<bool, Er
     Ok(added)
 }
 
+
 pub async fn remove_config_key(client: &mut Client, key: String) -> Result<bool, Error> { 
     let mut keys = get_config_key_all(client).await?;
     let removed = keys.remove(&key);
     update_config_keys(client, keys).await?;
     Ok(removed)
+}
+
+pub async fn get_node_config_value_all(client: &mut Client, node_name: String) -> Result<NodeConfig, Error> {
+    let keys = client.get(node_name, Some(GetOptions::new().with_prefix())).await?;
+
+    let mut node_conf = NodeConfig::new();
+
+    for k in keys.kvs().iter() {
+        let key = k.key_str()?.to_string();
+        let value = k.value_str()?.to_string();
+        node_conf.insert(key, value);
+    }
+    Ok(node_conf.to_owned())
+}
+
+pub async fn get_node_config_value(client: &mut Client, node_name: String, key: String) -> Result<String, Error> {
+    let valid = is_valid_config_key(client, key.clone()).await?;
+    if !valid {
+        return Err(Error::InvalidArgs("Invalid Config Key".to_string()))
+    }
+
+    let resp = client.get(format!("{}/{}", node_name, key), None).await?;
+
+    match resp.kvs().first() {
+        Some(val) => Ok(val.value_str()?.to_string()),
+        None => Ok(String::new()), // TODO Check groups for key values
+    }
+}
+
+pub async fn set_node_config_value(client: &mut Client, node_name: String, key: String, value: String) -> Result<(), Error> {
+    let valid = is_valid_config_key(client, key.clone()).await?;
+    if !valid {
+        return Err(Error::InvalidArgs("Invalid Config Key".to_string()))
+    }
+
+    client.put(format!("{}/{}", node_name, key), value, None).await?;
+    Ok(())
 }
 
 #[derive(Clone)]

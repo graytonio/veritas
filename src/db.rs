@@ -46,11 +46,11 @@ pub async fn remove_config_key(client: &mut Client, key: String) -> Result<bool,
     Ok(removed)
 }
 
+// TODO Should node be CRUD object? Should node creation/deletion be infered from available keys?
+
 pub async fn get_node_config_value_all(client: &mut Client, node_name: String) -> Result<NodeConfig, Error> {
     let keys = client.get(node_name, Some(GetOptions::new().with_prefix())).await?;
-
     let mut node_conf = NodeConfig::new();
-
     for k in keys.kvs().iter() {
         let key = k.key_str()?.to_string();
         let value = k.value_str()?.to_string();
